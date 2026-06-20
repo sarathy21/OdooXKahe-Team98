@@ -42,6 +42,82 @@ export class ProductService {
     return JSON.parse(data);
   }
 
+  static async hydrateFromSupabase(): Promise<Product[]> {
+    if (typeof window === 'undefined') return [];
+    try {
+      const { supabase } = await import('../supabase');
+      const { data, error } = await supabase.from('products').select('*');
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        const localProducts = this.getProducts();
+        const updatedProducts = [...localProducts];
+
+        data.forEach((dbProd: any) => {
+          const procurementType: 'MTS' | 'MTO' = 
+            dbProd.procurement_strategy === 'MTO' || dbProd.procurement_strategy === 'MTS'
+              ? dbProd.procurement_strategy as 'MTS' | 'MTO'
+              : 'MTS';
+
+          const procurementMethod: 'PURCHASE' | 'MANUFACTURING' = 
+            dbProd.procurement_type === 'manufacturing' || dbProd.procurement_type === 'MANUFACTURING'
+              ? 'MANUFACTURING'
+              : 'PURCHASE';
+
+          const onHand = dbProd.stock_qty || 0;
+          const reserved = dbProd.reserved || 0;
+          const freeQty = onHand - reserved;
+          const lowStockThreshold = dbProd.low_stock_threshold || 10;
+
+          let status: 'in stock' | 'low stock' | 'out of stock' = 'in stock';
+          if (freeQty <= 0) {
+            status = 'out of stock';
+          } else if (freeQty <= lowStockThreshold) {
+            status = 'low stock';
+          }
+
+          const mapped: Product = {
+            id: dbProd.id,
+            sku: dbProd.sku || `SKU-${dbProd.id.slice(0, 4).toUpperCase()}`,
+            name: dbProd.name,
+            category: dbProd.category || 'General',
+            salesPrice: Number(dbProd.sales_price) || 0,
+            costPrice: Number(dbProd.cost_price) || 0,
+            onHand,
+            reserved,
+            freeQty,
+            lowStockThreshold,
+            procurementType,
+            procurementMethod,
+            vendor: dbProd.vendor || 'Internal',
+            status,
+            isActive: dbProd.is_active !== false
+          };
+
+          const existingIndex = updatedProducts.findIndex(
+            p => p.id === dbProd.id || p.name.toLowerCase() === dbProd.name.toLowerCase()
+          );
+
+          if (existingIndex !== -1) {
+            updatedProducts[existingIndex] = {
+              ...updatedProducts[existingIndex],
+              ...mapped,
+              isActive: updatedProducts[existingIndex].isActive && mapped.isActive
+            };
+          } else {
+            updatedProducts.push(mapped);
+          }
+        });
+
+        this.saveProducts(updatedProducts);
+        return updatedProducts.filter(p => p.isActive);
+      }
+    } catch (err) {
+      console.error('Failed to hydrate from Supabase:', err);
+    }
+    return this.getProducts().filter(p => p.isActive);
+  }
+
   private static saveProducts(products: Product[]) {
     if (typeof window !== 'undefined') {
       localStorage.setItem(this.STORAGE_KEY, JSON.stringify(products));
@@ -58,10 +134,20 @@ export class ProductService {
       input.procurementType
     );
 
+    const generateUUID = () => {
+      if (typeof window !== 'undefined' && window.crypto && window.crypto.randomUUID) {
+        return window.crypto.randomUUID();
+      }
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+        var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+        return v.toString(16);
+      });
+    };
+
     const newProduct: Product = {
       ...input,
       sku: input.sku || `SKU-${Date.now().toString().slice(-4)}`,
-      id: `PRD-${String(products.length + 1).padStart(3, '0')}`,
+      id: generateUUID(),
       reserved: 0,
       freeQty: calculation.freeQty,
       status: calculation.status,
@@ -71,7 +157,17 @@ export class ProductService {
     products.unshift(newProduct);
     this.saveProducts(products);
     
-    SyncQueue.enqueue('product', 'CREATE', newProduct.id, newProduct);
+    const dbPayload = {
+      id: newProduct.id,
+      name: newProduct.name,
+      stock_qty: newProduct.onHand,
+      sales_price: newProduct.salesPrice,
+      cost_price: newProduct.costPrice,
+      procurement_strategy: newProduct.procurementType,
+      procurement_type: newProduct.procurementMethod === 'MANUFACTURING' ? 'manufacturing' : 'purchase'
+    };
+
+    SyncQueue.enqueue('product', 'CREATE', newProduct.id, dbPayload);
 
     AuditLogger.log('CREATE', 'Products', newProduct.id, `Created product: ${newProduct.name} with Initial Stock: ${newProduct.onHand}`);
     
@@ -105,7 +201,17 @@ export class ProductService {
     products[index] = updatedProduct;
     this.saveProducts(products);
     
-    SyncQueue.enqueue('product', 'UPDATE', updatedProduct.id, updatedProduct);
+    const dbPayload = {
+      id: updatedProduct.id,
+      name: updatedProduct.name,
+      stock_qty: updatedProduct.onHand,
+      sales_price: updatedProduct.salesPrice,
+      cost_price: updatedProduct.costPrice,
+      procurement_strategy: updatedProduct.procurementType,
+      procurement_type: updatedProduct.procurementMethod === 'MANUFACTURING' ? 'manufacturing' : 'purchase'
+    };
+
+    SyncQueue.enqueue('product', 'UPDATE', updatedProduct.id, dbPayload);
 
     AuditLogger.log('UPDATE', 'Products', id, `Updated product: ${updatedProduct.name}`);
     return updatedProduct;
@@ -121,13 +227,15 @@ export class ProductService {
       throw new Error("Cannot delete product: Stock is currently reserved for an active order.");
     }
 
-    // Soft delete
-    products[index].isActive = false;
+    const deletedProduct = products[index];
+    // Soft delete locally
+    deletedProduct.isActive = false;
     this.saveProducts(products);
     
-    SyncQueue.enqueue('product', 'UPDATE', products[index].id, products[index]);
+    // Delete in Supabase completely
+    SyncQueue.enqueue('product', 'DELETE', deletedProduct.id, null);
 
-    AuditLogger.log('DELETE', 'Products', id, `Soft deleted product: ${products[index].name}`);
+    AuditLogger.log('DELETE', 'Products', id, `Soft deleted product: ${deletedProduct.name}`);
     return true;
   }
 

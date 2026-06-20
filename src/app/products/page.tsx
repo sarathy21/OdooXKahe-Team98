@@ -30,12 +30,17 @@ export default function ProductsPage() {
     refreshData();
   }, []);
 
-  const refreshData = () => {
+  const refreshData = async () => {
     setLoading(true);
-    setTimeout(() => {
+    try {
+      const hydrated = await ProductService.hydrateFromSupabase();
+      setProducts(hydrated);
+    } catch (err) {
+      console.error("Hydration failed, using local fallback", err);
       setProducts(ProductService.getProducts().filter(p => p.isActive));
+    } finally {
       setLoading(false);
-    }, 400); // simulate latency
+    }
   };
 
   const handleOpenCreate = () => {
@@ -111,13 +116,14 @@ export default function ProductsPage() {
     },
     { header: "Category", accessorKey: "category" },
     { 
-      header: "Stock (Free / On Hand)", 
+      header: "Availability", 
       accessorKey: "stockInfo", 
       align: "right" as const,
       cell: (r: any) => (
-        <div className="flex flex-col items-end">
-          <span className="font-bold text-slate-900">{r.freeQty} Free</span>
-          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">{r.onHand} Total ({r.reserved} Rsv)</span>
+        <div className="flex flex-col items-end gap-0.5">
+          <span className="font-bold text-slate-900 text-xs">{r.freeQty} Free</span>
+          <span className="text-[10px] font-semibold text-slate-500">{r.onHand} On Hand</span>
+          <span className="text-[10px] font-semibold text-slate-400">{r.reserved} Reserved</span>
         </div>
       )
     },
@@ -143,15 +149,20 @@ export default function ProductsPage() {
       cell: (r: any) => `₹${r.salesPrice.toLocaleString('en-IN')}`
     },
     { 
-      header: "Status", 
+      header: "Availability Status", 
       accessorKey: "status", 
       align: "center" as const, 
       cell: (r: any) => {
-        let variant = 'default';
-        if (r.status === 'in stock') variant = 'success';
-        if (r.status === 'low stock') variant = 'warning';
-        if (r.status === 'out of stock') variant = 'critical';
-        return <StatusBadge status={variant as any} label={r.status.toUpperCase()} />;
+        let variant = 'success';
+        let label = 'Healthy';
+        if (r.freeQty <= 5) {
+          variant = 'critical';
+          label = 'Critical';
+        } else if (r.freeQty <= 15) {
+          variant = 'warning';
+          label = 'Low Stock';
+        }
+        return <StatusBadge status={variant as any} label={label.toUpperCase()} />;
       }
     },
     {

@@ -159,10 +159,18 @@ export default function DashboardPage() {
     { name: 'Sales Out', value: sales.length * 15 }
   ];
 
-  // --- ALERTS ---
   const alerts = [];
   if (grossProfit < 0) alerts.push({ msg: `Critical Profit Warning: Operating at a loss of ${formatINR(Math.abs(grossProfit))}`, type: 'CRITICAL', link: '/reports' });
-  if (invLow > 0) alerts.push({ msg: `${invLow} products have reached Low Stock thresholds.`, type: 'CRITICAL', link: '/products' });
+  
+  const topCriticalStocks = [...products]
+    .filter(p => p.freeQty <= 15)
+    .sort((a, b) => a.freeQty - b.freeQty)
+    .slice(0, 2);
+    
+  topCriticalStocks.forEach(item => {
+    alerts.push({ msg: `${item.name} → ${item.freeQty} units left`, type: 'CRITICAL', link: '/products' });
+  });
+
   if (mfgDelayed > 0) alerts.push({ msg: `${mfgDelayed} Factory Orders are delayed.`, type: 'WARNING', link: '/manufacturing-orders' });
   if (poPending > 0) alerts.push({ msg: `${poPending} Purchase Orders are awaiting receipt.`, type: 'INFO', link: '/purchase-orders' });
 
@@ -242,7 +250,7 @@ export default function DashboardPage() {
 
         {/* SECTION 2: ADVANCED ANALYTICS GRAPHS */}
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-          <div className="xl:col-span-2 bg-white border border-gray-100 p-6 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.02)] h-[400px] flex flex-col cursor-pointer hover:border-[#774F6C]/30 transition-colors" onClick={() => router.push('/reports')}>
+          <div className="xl:col-span-2 bg-white border border-gray-100 p-6 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.02)] h-[280px] flex flex-col cursor-pointer hover:border-[#774F6C]/30 transition-colors" onClick={() => router.push('/reports')}>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Revenue vs Cost Analysis</h3>
               <span className="text-[10px] font-bold text-[#774F6C] uppercase tracking-widest">Click for Full Report</span>
@@ -275,7 +283,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="bg-white border border-gray-100 p-6 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.02)] h-[400px] flex flex-col cursor-pointer hover:border-[#774F6C]/30 transition-colors" onClick={() => router.push('/products')}>
+          <div className="bg-white border border-gray-100 p-6 shadow-[inset_0_0_0_1px_rgba(0,0,0,0.02)] h-[280px] flex flex-col cursor-pointer hover:border-[#774F6C]/30 transition-colors" onClick={() => router.push('/products')}>
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-xs font-black text-slate-900 uppercase tracking-widest">Inventory Movement</h3>
             </div>
