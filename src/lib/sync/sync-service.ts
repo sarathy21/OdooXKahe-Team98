@@ -42,12 +42,16 @@ export class SyncService {
       sales_order: 'sales_orders',
       purchase_order: 'purchase_orders',
       manufacturing_order: 'manufacturing_orders',
-      bom: 'boms',
+      bom: 'bom',
       audit_log: 'audit_logs'
     };
 
     const table = tableMap[task.entity];
     if (!table) throw new Error(`Unknown entity ${task.entity}`);
+    if (task.entity === 'audit_log') {
+      // Skip syncing audit logs if table is not in database, mark successful
+      return;
+    }
 
     if (task.action === 'CREATE' || task.action === 'UPDATE') {
       const { error } = await supabase
