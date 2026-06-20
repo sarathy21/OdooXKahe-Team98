@@ -54,8 +54,17 @@ export class SyncService {
           await this.syncTaskToSupabase(task);
           SyncQueue.dequeue(task.id);
         } catch (err: any) {
-          console.error('Sync failed for task', task.id, err);
-          SyncQueue.markFailed(task.id, err.message || 'Unknown error');
+          console.error('--- DETAILED SYNC FAILURE LOG ---');
+          console.error('Task ID:', task.id);
+          console.error('Entity:', task.entity);
+          console.error('Action:', task.action);
+          console.error('Payload:', JSON.stringify(task.payload, null, 2));
+          console.error('Error Code:', err.code || 'N/A');
+          console.error('Error Message:', err.message || err);
+          console.error('Error Details:', err.details || 'N/A');
+          console.error('Error Hint:', err.hint || 'N/A');
+          console.error('---------------------------------');
+          SyncQueue.markFailed(task.id, err.message || JSON.stringify(err) || 'Unknown error');
         }
       }
     } finally {
