@@ -54,15 +54,16 @@ export class ProductService {
         const updatedProducts = [...localProducts];
 
         data.forEach((dbProd: any) => {
-          const procurementType: 'MTS' | 'MTO' = 
-            dbProd.procurement_strategy === 'MTO' || dbProd.procurement_strategy === 'MTS'
-              ? dbProd.procurement_strategy as 'MTS' | 'MTO'
-              : 'MTS';
+    // Convert DB schema values to local UI values
+    const procurementType: 'MTS' | 'MTO' = 
+      dbProd.procurement_strategy === 'MTO' || dbProd.procurement_strategy === 'make_to_order'
+        ? 'MTO'
+        : 'MTS';
 
-          const procurementMethod: 'PURCHASE' | 'MANUFACTURING' = 
-            dbProd.procurement_type === 'manufacturing' || dbProd.procurement_type === 'MANUFACTURING'
-              ? 'MANUFACTURING'
-              : 'PURCHASE';
+    const procurementMethod: 'PURCHASE' | 'MANUFACTURING' = 
+      dbProd.procurement_type === 'manufacturing' || dbProd.procurement_type === 'MANUFACTURING'
+        ? 'MANUFACTURING'
+        : 'PURCHASE';
 
           const onHand = dbProd.stock_qty || 0;
           const reserved = dbProd.reserved || 0;

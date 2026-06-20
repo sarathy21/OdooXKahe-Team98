@@ -86,13 +86,14 @@ export class SyncService {
       let payload = { ...task.payload };
 
       if (task.entity === 'product') {
+        const strategy = payload.procurementType === 'MTO' ? 'MTO' : 'MTS';
         payload = {
           id: recordId,
           name: payload.name,
           stock_qty: payload.onHand ?? payload.stock_qty ?? 0,
           sales_price: payload.salesPrice ?? payload.sales_price ?? 0,
           cost_price: payload.costPrice ?? payload.cost_price ?? 0,
-          procurement_strategy: payload.procurementType ?? payload.procurement_strategy ?? 'MTS',
+          procurement_strategy: strategy,
           procurement_type: payload.procurementMethod === 'MANUFACTURING' || payload.procurement_type === 'manufacturing' ? 'manufacturing' : 'purchase'
         };
       } else if (task.entity === 'sales_order') {
