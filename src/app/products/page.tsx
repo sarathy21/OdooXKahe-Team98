@@ -19,6 +19,7 @@ export default function ProductsPage() {
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
   const [editingProduct, setEditingProduct] = React.useState<Product | null>(null);
   const [deleteProductCandidate, setDeleteProductCandidate] = React.useState<Product | null>(null);
+  const [restrictionInfo, setRestrictionInfo] = React.useState<any | null>(null);
 
   // Form State
   const [formData, setFormData] = React.useState<ProductInput>({
@@ -78,6 +79,16 @@ export default function ProductsPage() {
 
   const handleDelete = () => {
     if (deleteProductCandidate) {
+      const check = ProductService.checkProductReferences(deleteProductCandidate.id);
+      if (check.isLinked) {
+        setRestrictionInfo({
+          name: deleteProductCandidate.name,
+          modules: check.modules
+        });
+        setDeleteProductCandidate(null);
+        return;
+      }
+
       try {
         ProductService.deleteProduct(deleteProductCandidate.id);
         refreshData();
@@ -354,6 +365,40 @@ export default function ProductsPage() {
               </button>
               <button onClick={handleDelete} className="px-4 py-2 text-sm font-bold text-white bg-rose-600 hover:bg-rose-700 transition-colors">
                 Delete Product
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE RESTRICTED DIALOG */}
+      {restrictionInfo && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[100] flex items-center justify-center animate-in fade-in duration-200 p-4">
+          <div className="bg-white max-w-md w-full shadow-2xl border-t-[6px] border-amber-500 p-6 animate-in zoom-in-95 duration-200">
+            <h2 className="text-xl font-black text-slate-900 mb-2 flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+              Delete Restricted
+            </h2>
+            <div className="text-sm font-semibold text-slate-600 mb-6 space-y-4 leading-relaxed">
+              <p>
+                This product <span className="font-black text-slate-900">"{restrictionInfo.name}"</span> cannot be deleted because it is already linked to existing business transactions.
+              </p>
+              <div className="bg-[#774F6C]/5 p-4 border border-[#774F6C]/10 rounded-sm">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-2">Linked modules may include:</span>
+                <ul className="space-y-1.5 text-xs text-slate-700 font-bold">
+                  {restrictionInfo.modules.sales && <li className="flex items-center gap-2">✓ Sales Orders</li>}
+                  {restrictionInfo.modules.purchase && <li className="flex items-center gap-2">✓ Purchase Orders</li>}
+                  {restrictionInfo.modules.manufacturing && <li className="flex items-center gap-2">✓ Manufacturing Orders</li>}
+                  {restrictionInfo.modules.bom && <li className="flex items-center gap-2">✓ Bill of Materials</li>}
+                </ul>
+              </div>
+              <p className="text-xs text-slate-400 mt-2">
+                Deleting this product may break ERP data integrity. Please complete, cancel, or remove the referencing transactions first.
+              </p>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => setRestrictionInfo(null)} className="px-5 py-2.5 text-sm font-bold text-white bg-[#774F6C] hover:bg-[#774F6C]/90 transition-colors">
+                Understood
               </button>
             </div>
           </div>

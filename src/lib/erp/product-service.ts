@@ -218,10 +218,77 @@ export class ProductService {
     return updatedProduct;
   }
 
+  static checkProductReferences(id: string): { 
+    isLinked: boolean; 
+    modules: { sales: boolean; purchase: boolean; manufacturing: boolean; bom: boolean }; 
+  } {
+    const modules = { sales: false, purchase: false, manufacturing: false, bom: false };
+
+    if (typeof window === 'undefined') {
+      return { isLinked: false, modules };
+    }
+
+    // 1. Check Sales Orders
+    try {
+      const salesData = localStorage.getItem('erp_sales_orders');
+      if (salesData) {
+        const sales = JSON.parse(salesData);
+        modules.sales = sales.some((order: any) => 
+          order.lines && order.lines.some((line: any) => line.productId === id)
+        );
+      }
+    } catch (e) {
+      console.error('Failed to check sales references', e);
+    }
+
+    // 2. Check Purchase Orders
+    try {
+      const poData = localStorage.getItem('erp_procurement_ledger');
+      if (poData) {
+        const pos = JSON.parse(poData);
+        modules.purchase = pos.some((po: any) => po.productId === id);
+      }
+    } catch (e) {
+      console.error('Failed to check purchase references', e);
+    }
+
+    // 3. Check Manufacturing Orders
+    try {
+      const mfgData = localStorage.getItem('erp_manufacturing_orders');
+      if (mfgData) {
+        const mfgs = JSON.parse(mfgData);
+        modules.manufacturing = mfgs.some((mo: any) => mo.productId === id);
+      }
+    } catch (e) {
+      console.error('Failed to check manufacturing references', e);
+    }
+
+    // 4. Check Bill of Materials
+    try {
+      const bomData = localStorage.getItem('erp_boms');
+      if (bomData) {
+        const boms = JSON.parse(bomData);
+        modules.bom = boms.some((bom: any) => bom.productId === id);
+      }
+    } catch (e) {
+      console.error('Failed to check bom references', e);
+    }
+
+    const isLinked = modules.sales || modules.purchase || modules.manufacturing || modules.bom;
+
+    return { isLinked, modules };
+  }
+
   static deleteProduct(id: string): boolean {
     const products = this.getProducts();
     const index = products.findIndex(p => p.id === id);
     if (index === -1) return false;
+
+    // Run active reference check
+    const refs = this.checkProductReferences(id);
+    if (refs.isLinked) {
+      throw new Error("Cannot delete product: This product is currently linked to active business transactions.");
+    }
 
     // Simulate "linked" check - if reserved > 0, it's used in an SO/MO
     if (products[index].reserved > 0) {
